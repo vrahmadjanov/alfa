@@ -1,0 +1,6 @@
+.env
+Makefile
+README.md
+node_modules
+.git
+.gitignore

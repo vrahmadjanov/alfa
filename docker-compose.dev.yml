@@ -14,7 +14,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+      redis:
+        condition: service_healthy
+    command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate && daphne -b 0.0.0.0 -p 8000 alfa.asgi:application"
 
   db:
     image: postgres:16-alpine
@@ -28,6 +30,18 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   frontend:
@@ -61,3 +75,4 @@ volumes:
   postgres_data:
   static_volume:
   media_volume:
+  redis_data:

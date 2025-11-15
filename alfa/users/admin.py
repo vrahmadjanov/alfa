@@ -29,6 +29,8 @@ class UserAdmin(BaseUserAdmin):
         }),
     )
     
+    readonly_fields = ('date_joined', 'last_login')
+    
     list_display = ('email', 'first_name', 'last_name', 'is_email_verified', 'is_staff', 'created_at')
     list_filter = ('is_staff', 'is_superuser', 'is_active', 'is_email_verified', 'date_joined')
     search_fields = ('email', 'first_name', 'last_name')

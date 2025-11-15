@@ -1,4 +1,4 @@
-.PHONY: run up down build logs restart shell migrate makemigrations createsuperuser collectstatic db-shell db-reset test
+.PHONY: run up down build logs restart shell migrate makemigrations createsuperuser collectstatic db-shell db-reset test status
 
 # Запустить приложение (фронт + бэк + БД)
 run:
@@ -65,4 +65,9 @@ db-reset:
 # Запустить тесты
 test:
 	docker-compose -f docker-compose.dev.yml exec backend python manage.py test -v 2
+
+# Проверка статуса всех сервисов
+status:
+	@echo "Статус всех контейнеров:"
+	@docker-compose -f docker-compose.dev.yml ps
 

@@ -25,6 +25,7 @@ urlpatterns = [
     
     # API endpoints
     path('api/', include('users.urls')),
+    path('api/chat/', include('chat.urls')),
 ]
 
 # Serve media files in development

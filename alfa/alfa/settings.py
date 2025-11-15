@@ -52,7 +52,7 @@ INSTALLED_APPS = [
     # My apps
     'users',  # Управление пользователями и бизнесами
     'marketing',
-    # 'chat',
+    'chat',
     # 'documents',
 ]
 

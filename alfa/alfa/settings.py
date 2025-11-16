@@ -149,6 +149,29 @@ USE_I18N = True
 USE_TZ = True
 
 
+# OpenRouter API Configuration
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
+OPENROUTER_SITE_URL = os.getenv('OPENROUTER_SITE_URL', 'http://localhost')
+OPENROUTER_SITE_NAME = os.getenv('OPENROUTER_SITE_NAME', 'Alfa')
+
+# Список моделей с приоритетами (первая - основная, остальные - fallback)
+OPENROUTER_MODELS = [
+    'qwen/qwen3-30b-a3b:free',
+    'qwen/qwen3-14b:free',
+    'qwen/qwen3-235b-a22b:free',
+    'tngtech/deepseek-r1t-chimera:free',
+    'mistralai/mistral-small-3.1-24b-instruct:free',
+    'google/gemma-3-4b-it:free',
+    'google/gemini-2.0-flash-exp:free',
+    'qwen/qwen-2.5-72b-instruct:free',
+    'mistralai/mistral-nemo:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+]
+
+# Основная модель (можно переопределить через .env)
+OPENROUTER_MODEL = os.getenv('OPENROUTER_MODEL', OPENROUTER_MODELS[0])
+
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 

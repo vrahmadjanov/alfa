@@ -1,7 +1,7 @@
 """
-Unit и API тесты для чата с AI ассистентом
+API тесты для чата с AI ассистентом
 """
-from django.test import TestCase
+from unittest.mock import patch, MagicMock
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
@@ -324,18 +324,42 @@ class MessageAPITest(APITestCase):
         self.refresh = RefreshToken.for_user(self.user)
         self.access_token = str(self.refresh.access_token)
         
-        self.send_url = reverse('chat:message_send', kwargs={'conversation_id': self.conversation.id})
-        self.list_url = reverse('chat:message_list', kwargs={'conversation_id': self.conversation.id})
+        self.messages_url = reverse('chat:messages', kwargs={'conversation_id': self.conversation.id})
     
-    def test_send_message_success(self):
+    @patch('chat.views.LLMService')
+    def test_send_message_success(self, MockLLMService):
         """Тест успешной отправки сообщения"""
+        # Настраиваем mock для экземпляра LLMService
+        mock_instance = MockLLMService.return_value
+        
+        # Mock generate_response - метод экземпляра
+        mock_response_data = {
+            'content': 'Привет! Я помогу вам с маркетингом.',
+            'model': 'test-model',
+            'tokens_used': 50,
+            'response_time': 1.5,
+            'metadata': {}
+        }
+        mock_instance.generate_response.return_value = mock_response_data
+        
+        # Mock create_assistant_message - статический метод класса
+        # Реально создаем сообщение в БД, чтобы тест был корректным
+        MockLLMService.create_assistant_message = lambda conversation, response_data: Message.objects.create(
+            conversation=conversation,
+            role=Message.Role.ASSISTANT,
+            content=response_data['content'],
+            model=response_data['model'],
+            tokens_used=response_data['tokens_used'],
+            response_time=response_data['response_time']
+        )
+        
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access_token}')
         
         payload = {
             'content': 'Нужна помощь с маркетингом'
         }
         
-        response = self.client.post(self.send_url, data=payload, format='json')
+        response = self.client.post(self.messages_url, data=payload, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
@@ -344,6 +368,9 @@ class MessageAPITest(APITestCase):
         
         # Проверяем, что сообщения созданы в БД
         self.assertEqual(self.conversation.messages.count(), 3)  # 1 начальное + 2 новых
+        
+        # Проверяем, что LLM был вызван
+        mock_instance.generate_response.assert_called_once()
     
     def test_send_empty_message(self):
         """Тест отправки пустого сообщения"""
@@ -353,7 +380,7 @@ class MessageAPITest(APITestCase):
             'content': '   '
         }
         
-        response = self.client.post(self.send_url, data=payload, format='json')
+        response = self.client.post(self.messages_url, data=payload, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data['success'])
@@ -366,7 +393,7 @@ class MessageAPITest(APITestCase):
             'content': 'a' * 4001
         }
         
-        response = self.client.post(self.send_url, data=payload, format='json')
+        response = self.client.post(self.messages_url, data=payload, format='json')
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data['success'])
@@ -375,7 +402,7 @@ class MessageAPITest(APITestCase):
         """Тест получения списка сообщений"""
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access_token}')
         
-        response = self.client.get(self.list_url)
+        response = self.client.get(self.messages_url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
@@ -449,118 +476,3 @@ class ConversationStatsAPITest(APITestCase):
         self.assertIn('by_category', stats)
         self.assertEqual(stats['by_category']['marketing']['count'], 2)
 
-
-class ConversationModelTest(TestCase):
-    """
-    Unit тесты для модели Conversation
-    """
-    
-    def setUp(self):
-        """Подготовка данных для тестов"""
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='TestPassword123!'
-        )
-        self.conversation = Conversation.objects.create(
-            user=self.user,
-            category='marketing'
-        )
-    
-    def test_conversation_string_representation(self):
-        """Тест строкового представления диалога"""
-        self.conversation.title = 'Тестовый диалог'
-        self.assertIn('Тестовый диалог', str(self.conversation))
-    
-    def test_conversation_without_title(self):
-        """Тест диалога без заголовка"""
-        str_repr = str(self.conversation)
-        self.assertIn(f'Диалог #{self.conversation.id}', str_repr)
-    
-    def test_get_messages_count(self):
-        """Тест подсчета количества сообщений"""
-        Message.objects.create(
-            conversation=self.conversation,
-            role='user',
-            content='Test 1'
-        )
-        Message.objects.create(
-            conversation=self.conversation,
-            role='assistant',
-            content='Test 2'
-        )
-        
-        self.assertEqual(self.conversation.get_messages_count(), 2)
-    
-    def test_get_last_message(self):
-        """Тест получения последнего сообщения"""
-        msg1 = Message.objects.create(
-            conversation=self.conversation,
-            role='user',
-            content='First'
-        )
-        msg2 = Message.objects.create(
-            conversation=self.conversation,
-            role='assistant',
-            content='Second'
-        )
-        
-        last_msg = self.conversation.get_last_message()
-        self.assertEqual(last_msg.id, msg2.id)
-
-
-class MessageModelTest(TestCase):
-    """
-    Unit тесты для модели Message
-    """
-    
-    def setUp(self):
-        """Подготовка данных для тестов"""
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='TestPassword123!'
-        )
-        self.conversation = Conversation.objects.create(
-            user=self.user,
-            category='marketing'
-        )
-    
-    def test_message_updates_conversation_last_message_at(self):
-        """Тест обновления last_message_at при создании сообщения"""
-        self.assertIsNone(self.conversation.last_message_at)
-        
-        message = Message.objects.create(
-            conversation=self.conversation,
-            role='user',
-            content='Test message'
-        )
-        
-        self.conversation.refresh_from_db()
-        self.assertIsNotNone(self.conversation.last_message_at)
-        self.assertEqual(self.conversation.last_message_at, message.created_at)
-    
-    def test_first_message_sets_conversation_title(self):
-        """Тест автоматической установки заголовка из первого сообщения"""
-        self.assertEqual(self.conversation.title, '')
-        
-        Message.objects.create(
-            conversation=self.conversation,
-            role='user',
-            content='Это моё первое сообщение'
-        )
-        
-        self.conversation.refresh_from_db()
-        self.assertEqual(self.conversation.title, 'Это моё первое сообщение')
-    
-    def test_long_first_message_truncates_title(self):
-        """Тест обрезки длинного заголовка"""
-        long_content = 'a' * 100
-        
-        Message.objects.create(
-            conversation=self.conversation,
-            role='user',
-            content=long_content
-        )
-        
-        self.conversation.refresh_from_db()
-        self.assertEqual(len(self.conversation.title), 53)  # 50 + '...'
-        self.assertTrue(self.conversation.title.endswith('...'))

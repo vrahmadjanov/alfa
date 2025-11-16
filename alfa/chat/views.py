@@ -14,6 +14,7 @@ from chat.serializers import (
     MessageSerializer,
     MessageCreateSerializer
 )
+from chat.services import LLMService
 from users.utils.api_response import APIResponse, format_serializer_errors
 
 
@@ -154,14 +155,33 @@ class ConversationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class MessageCreateView(APIView):
     """
-    API endpoint для отправки сообщения в диалог
+    API endpoint для работы с сообщениями в диалоге
     
-    POST /api/chat/conversations/{conversation_id}/messages/
+    GET /api/chat/conversations/{conversation_id}/messages/ - список сообщений
+    POST /api/chat/conversations/{conversation_id}/messages/ - отправить сообщение
     """
     permission_classes = [permissions.IsAuthenticated]
     
+    def get(self, request, conversation_id):
+        """GET - получить список сообщений"""
+        # Проверяем, что диалог принадлежит пользователю
+        conversation = get_object_or_404(
+            Conversation,
+            id=conversation_id,
+            user=request.user
+        )
+        
+        # Получаем все сообщения
+        messages = Message.objects.filter(conversation=conversation).order_by('created_at')
+        serializer = MessageSerializer(messages, many=True)
+        
+        return APIResponse.success(
+            data=serializer.data,
+            message=f"Найдено сообщений: {len(serializer.data)}"
+        )
+    
     def post(self, request, conversation_id):
-        """Отправка сообщения в диалог"""
+        """POST - отправить сообщение и получить ответ от AI"""
         # Проверяем, что диалог принадлежит пользователю
         conversation = get_object_or_404(
             Conversation,
@@ -184,13 +204,17 @@ class MessageCreateView(APIView):
             content=serializer.validated_data['content']
         )
         
-        # TODO: Здесь будет интеграция с LLM для генерации ответа
-        # Пока возвращаем заглушку
-        assistant_message = Message.objects.create(
+        # Генерируем ответ от LLM
+        llm_service = LLMService()
+        response_data = llm_service.generate_response(
             conversation=conversation,
-            role=Message.Role.ASSISTANT,
-            content="Это тестовый ответ. Интеграция с LLM будет добавлена позже.",
-            model="test-model"
+            user_message=user_message
+        )
+        
+        # Создаем сообщение ассистента
+        assistant_message = LLMService.create_assistant_message(
+            conversation=conversation,
+            response_data=response_data
         )
         
         # Возвращаем оба сообщения
@@ -200,39 +224,6 @@ class MessageCreateView(APIView):
                 'assistant_message': MessageSerializer(assistant_message).data
             },
             message="Сообщение отправлено"
-        )
-
-
-class MessageListView(generics.ListAPIView):
-    """
-    API endpoint для получения списка сообщений в диалоге
-    
-    GET /api/chat/conversations/{conversation_id}/messages/
-    """
-    serializer_class = MessageSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        """Возвращаем сообщения из диалога пользователя"""
-        conversation_id = self.kwargs.get('conversation_id')
-        
-        # Проверяем, что диалог принадлежит пользователю
-        conversation = get_object_or_404(
-            Conversation,
-            id=conversation_id,
-            user=self.request.user
-        )
-        
-        return Message.objects.filter(conversation=conversation).order_by('created_at')
-    
-    def list(self, request, *args, **kwargs):
-        """GET - список сообщений"""
-        queryset = self.filter_queryset(self.get_queryset())
-        serializer = self.get_serializer(queryset, many=True)
-        
-        return APIResponse.success(
-            data=serializer.data,
-            message=f"Найдено сообщений: {len(serializer.data)}"
         )
 
 

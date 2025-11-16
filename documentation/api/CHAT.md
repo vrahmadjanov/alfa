@@ -12,6 +12,50 @@ http://localhost/api/chat/
 
 **Все endpoints требуют аутентификации через JWT token.**
 
+## Настройка OpenRouter API
+
+Для работы чата с AI необходимо настроить OpenRouter API:
+
+1. Пройти регистрацию в Open Router [openrouter.ai](https://openrouter.ai/)
+2. Получить API ключ в разделе [Keys](https://openrouter.ai/keys)
+3. Добавить в `.env`:
+
+```bash
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
+
+# Основная модель (опционально, по умолчанию используется первая из списка)
+OPENROUTER_MODEL=qwen/qwen3-30b-a3b:free
+
+OPENROUTER_SITE_URL=http://localhost
+OPENROUTER_SITE_NAME=Alfa
+```
+
+[Полный список моделей на OpenRouter](https://openrouter.ai/models)
+
+### Множественные LLM модели
+
+Система автоматически использует бесплатные модели с приоритетами. Если одна модель недоступна (rate limit, timeout), система автоматически переключается на следующую:
+
+  1. `qwen/qwen3-30b-a3b:free`,
+  2. `qwen/qwen3-14b:free`,
+  3. `qwen/qwen3-235b-a22b:free`,
+  4. `tngtech/deepseek-r1t-chimera:free`,
+  5. `mistralai/mistral-small-3.1-24b-instruct:free`,
+  6. `google/gemma-3-4b-it:free`,
+  7. `google/gemini-2.0-flash-exp:free`,
+  8. `qwen/qwen-2.5-72b-instruct:free`,
+  9. `mistralai/mistral-nemo:free`,
+  10. `nousresearch/hermes-3-llama-3.1-405b:free`,
+
+**Преимущества:**
+- **Высокая доступность** - если одна модель перегружена, система переключается на другую
+- **Прозрачность** - в метаданных указывается, какая модель ответила и сколько попыток было сделано
+- **Автоматическое восстановление** - не требует вмешательства пользователя
+
+**Настройка:** Список моделей можно изменить в `alfa/settings.py` в переменной `OPENROUTER_MODELS`.
+
+Подробнее см. [документацию по LLM интеграции](../dev/LLM_SETUP.md)
+
 ---
 
 ### 1. Создать новый диалог
@@ -275,69 +319,7 @@ Authorization: Bearer <access_token>
 
 ---
 
-### 6. Отправить сообщение
-
-**POST** `/api/chat/conversations/{conversation_id}/messages/`
-
-Отправляет сообщение в диалог и получает ответ от AI ассистента.
-
-**Headers:**
-```
-Authorization: Bearer <access_token>
-```
-
-**Request Body:**
-```json
-{
-  "content": "Какую социальную сеть лучше использовать для продвижения кофейни?"
-}
-```
-
-**Validation:**
-- `content` не может быть пустым
-- Максимальная длина: 4000 символов
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Сообщение успешно отправлено",
-  "data": {
-    "user_message": {
-      "id": 10,
-      "role": "user",
-      "content": "Какую социальную сеть лучше использовать для продвижения кофейни?",
-      "created_at": "2025-11-15T10:30:00Z"
-    },
-    "assistant_message": {
-      "id": 11,
-      "role": "assistant",
-      "content": "Для продвижения кофейни наиболее эффективными будут Instagram и ВКонтакте. Instagram отлично подходит для визуального контента - фото напитков, интерьера, процесса приготовления кофе. ВКонтакте позволяет создать сообщество и делать таргетированную рекламу на локальную аудиторию. Также рекомендую использовать Telegram для программы лояльности и специальных предложений.",
-      "model": "gpt-4",
-      "tokens_used": 180,
-      "response_time": 3.2,
-      "created_at": "2025-11-15T10:30:03Z"
-    }
-  },
-  "errors": null
-}
-```
-
-**Error Response (400 Bad Request):**
-```json
-{
-  "success": false,
-  "message": "Ошибка валидации данных",
-  "data": null,
-  "errors": {
-    "content": ["Сообщение не может быть пустым"]
-  }
-}
-```
-
----
-
-### 7. Получить список сообщений
+### 6. Получить список сообщений
 
 **GET** `/api/chat/conversations/{conversation_id}/messages/`
 
@@ -364,13 +346,87 @@ Authorization: Bearer <access_token>
       "id": 2,
       "role": "assistant",
       "content": "Здравствуйте! Я помогу вам с маркетинговой стратегией...",
-      "model": "gpt-4",
+      "model": "deepseek/deepseek-r1:free",
       "tokens_used": 150,
       "response_time": 2.5,
       "created_at": "2025-11-15T09:00:15Z"
     }
   ],
   "errors": null
+}
+```
+
+---
+
+### 7. Отправить сообщение
+
+**POST** `/api/chat/conversations/{conversation_id}/messages/`
+
+Отправляет сообщение в диалог и получает ответ от AI ассистента.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "content": "Какую социальную сеть лучше использовать для продвижения кофейни?"
+}
+```
+
+**Validation:**
+- `content` не может быть пустым
+- Максимальная длина: 4000 символов
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Сообщение отправлено",
+  "data": {
+    "user_message": {
+      "id": 10,
+      "role": "user",
+      "content": "Какую социальную сеть лучше использовать для продвижения кофейни?",
+      "created_at": "2025-11-15T10:30:00Z"
+    },
+    "assistant_message": {
+      "id": 11,
+      "role": "assistant",
+      "content": "Для продвижения кофейни наиболее эффективными будут Instagram и ВКонтакте. Instagram отлично подходит для визуального контента - фото напитков, интерьера, процесса приготовления кофе. ВКонтакте позволяет создать сообщество и делать таргетированную рекламу на локальную аудиторию. Также рекомендую использовать Telegram для программы лояльности и специальных предложений.",
+      "model": "google/gemini-2.0-flash-exp",
+      "tokens_used": 180,
+      "response_time": 3.2,
+      "created_at": "2025-11-15T10:30:03Z",
+      "metadata": {
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "attempted_models": 1,
+        "fallback_used": false
+      }
+    }
+  },
+  "errors": null
+}
+```
+
+**Важно:** 
+- Ответ от AI генерируется в реальном времени через OpenRouter API
+- Система автоматически пробует до 10 различных моделей при ошибках
+- Время ответа обычно составляет 30-60 секунд (зависит от модели и сложности запроса)
+- При использовании fallback время может увеличиться до нескольких минут
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "success": false,
+  "message": "Ошибка валидации данных",
+  "data": null,
+  "errors": {
+    "content": ["Сообщение не может быть пустым"]
+  }
 }
 ```
 
@@ -480,7 +536,14 @@ curl -X GET "http://localhost/api/chat/conversations/?status=active&category=mar
   -H "Authorization: Bearer <access_token>"
 ```
 
-### Отправка сообщения в диалог
+### Получение списка сообщений
+
+```bash
+curl -X GET http://localhost/api/chat/conversations/1/messages/ \
+  -H "Authorization: Bearer <access_token>"
+```
+
+### Отправка сообщения и получение ответа от AI
 
 ```bash
 curl -X POST http://localhost/api/chat/conversations/1/messages/ \
@@ -491,7 +554,7 @@ curl -X POST http://localhost/api/chat/conversations/1/messages/ \
   }'
 ```
 
-### Получение истории диалога
+### Получение детальной информации о диалоге (включая все сообщения)
 
 ```bash
 curl -X GET http://localhost/api/chat/conversations/1/ \
@@ -514,6 +577,80 @@ curl -X GET http://localhost/api/chat/stats/ \
 
 ---
 
+## Обработка ошибок LLM и Fallback механизм
+
+Система использует **интеллектуальный fallback механизм** для обеспечения высокой доступности:
+
+### Как работает fallback
+
+1. **Первая попытка** - система пытается использовать основную модель
+2. **Автоматическое переключение** - при ошибке (rate limit, timeout) автоматически пробует следующую модель из списка
+3. **До 10 попыток** - система пробует все доступные модели
+4. **Успешный ответ** - как только модель отвечает, результат возвращается пользователю
+
+### Пример успешного fallback
+
+Когда первая модель недоступна, но вторая отвечает успешно:
+
+```json
+{
+  "success": true,
+  "message": "Сообщение отправлено",
+  "data": {
+    "user_message": { ... },
+    "assistant_message": {
+      "id": 11,
+      "role": "assistant",
+      "content": "Ваш вопрос о маркетинге...",
+      "model": "qwen/qwen-2.5-72b-instruct",
+      "tokens_used": 245,
+      "response_time": 5.8,
+      "metadata": {
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "attempted_models": 2,
+        "fallback_used": true
+      }
+    }
+  }
+}
+```
+
+**Обратите внимание:**
+- `attempted_models: 2` - было сделано 2 попытки (первая не удалась, вторая успешна)
+- `fallback_used: true` - использовался fallback механизм
+- `model` - показывает, какая модель в итоге ответила
+
+### Пример полного отказа всех моделей
+
+Только когда **все** модели недоступны, система возвращает дружелюбное сообщение об ошибке:
+
+```json
+{
+  "success": true,
+  "message": "Сообщение отправлено",
+  "data": {
+    "user_message": { ... },
+    "assistant_message": {
+      "id": 11,
+      "role": "assistant",
+      "content": "Извините, сейчас слишком много запросов. Попробуйте через минуту.",
+      "model": "error-fallback",
+      "tokens_used": null,
+      "response_time": 28.5,
+      "metadata": {
+        "error": true,
+        "error_type": "rate_limit",
+        "error_message": "Rate limit exceeded"
+      }
+    }
+  }
+}
+```
+
+
+---
+
 ## Бизнес-логика
 
 ### Создание диалогов
@@ -530,17 +667,33 @@ curl -X GET http://localhost/api/chat/stats/ \
   - Настройки AI из `BusinessProfile.ai_preferences`
 
 ### Ответы AI ассистента
-- В текущей реализации используется mock-ответ для тестирования
-- При интеграции с реальным LLM (Open Router) будет использоваться контекст:
-  - История сообщений диалога
-  - Информация о бизнесе (если указан)
-  - Категория диалога для подбора соответствующего промпта
+
+- **Интеграция с OpenRouter API** - используется система из 10 бесплатных моделей с автоматическим fallback
+- **Fallback модели** - при недоступности основной модели система автоматически пробует альтернативные модели
+  
+AI получает полный контекст:
+- **Системный промпт** в зависимости от категории диалога (маркетинг, юридика, финансы и т.д.)
+- **Историю последних 10 сообщений** диалога для понимания контекста
+- **Информацию о бизнесе** (если диалог привязан к бизнесу):
+  - Тип и название бизнеса
+  - Описание и город
+  - Количество сотрудников
+  - Дополнительный контекст из `BusinessProfile.business_context`
+  - Настройки тона общения из `BusinessProfile.ai_preferences`
 
 ### Метаданные сообщений
-- `model` - название модели LLM, использованной для генерации ответа
+
+- `model` - название модели LLM, которая сгенерировала ответ (например, `google/gemini-2.0-flash-exp`)
 - `tokens_used` - количество токенов, потраченных на генерацию
 - `response_time` - время генерации ответа в секундах
-- `metadata` - дополнительная информация (параметры промпта, temperature и т.д.)
+- `metadata` - дополнительная информация:
+  - `temperature` - параметр креативности (0.0-1.0)
+  - `max_tokens` - максимальное количество токенов в ответе
+  - `attempted_models` - сколько моделей было попробовано (1 = успешно с первой попытки)
+  - `fallback_used` - был ли использован fallback механизм (true/false)
+  - `error` - присутствует только при ошибках (true)
+  - `error_type` - тип ошибки (только при ошибках)
+  - `finish_reason` - причина завершения генерации (`stop`, `length`, и т.д.)
 
 ### Архивирование
 - При удалении диалог не удаляется физически, а переводится в статус `archived`

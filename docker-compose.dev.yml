@@ -10,7 +10,7 @@ services:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     env_file:
-      - .env.dev
+      - .env
     depends_on:
       db:
         condition: service_healthy
@@ -21,7 +21,7 @@ services:
   db:
     image: postgres:16-alpine
     env_file:
-      - .env.dev
+      - .env
     ports:
       - "5432:5432"
     volumes:
@@ -54,7 +54,7 @@ services:
       - ./front:/app
       - /app/node_modules
     env_file:
-      - .env.dev
+      - .env
     command: npm start
 
   nginx:

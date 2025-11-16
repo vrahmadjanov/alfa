@@ -402,7 +402,7 @@ Authorization: Bearer <access_token>
       "created_at": "2025-11-15T10:30:03Z",
       "metadata": {
         "temperature": 0.7,
-        "max_tokens": 1000,
+        "max_tokens": 4000,
         "attempted_models": 1,
         "fallback_used": false
       }
@@ -607,7 +607,7 @@ curl -X GET http://localhost/api/chat/stats/ \
       "response_time": 5.8,
       "metadata": {
         "temperature": 0.7,
-        "max_tokens": 1000,
+        "max_tokens": 4000,
         "attempted_models": 2,
         "fallback_used": true
       }

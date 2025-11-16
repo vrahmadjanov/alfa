@@ -52,4 +52,34 @@ export async function createBusiness(payload) {
   }
 }
 
+export async function updateBusiness(businessId, payload) {
+  try {
+    const response = await apiClient.patch(`/businesses/${businessId}/`, payload);
+    const { success, data, errors } = response.data;
+
+    if (!success) {
+      throw new ApiError(errors || { general: response.data.message });
+    }
+
+    return data;
+  } catch (error) {
+    throw extractErrors(error);
+  }
+}
+
+export async function archiveBusiness(businessId) {
+  try {
+    const response = await apiClient.delete(`/businesses/${businessId}/`);
+    const { success, errors } = response.data;
+
+    if (!success) {
+      throw new ApiError(errors || { general: response.data.message });
+    }
+
+    return true;
+  } catch (error) {
+    throw extractErrors(error);
+  }
+}
+
 

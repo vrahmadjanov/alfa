@@ -130,6 +130,27 @@
   font-weight: 600;
 }
 
+.app-sidebar-divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 12px 0;
+}
+
+.app-sidebar-section-title {
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+
+.app-sidebar-link--business {
+  padding-left: 24px;
+  font-size: 0.9rem;
+}
+
 .app-sidebar-link--active::before {
   height: 20px;
 }

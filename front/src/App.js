@@ -4,14 +4,19 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Business from './pages/Business';
 import AppLayout from './layout/AppLayout';
 import './App.css';
 
 const RequireAuth = ({ children }) => {
   const token = localStorage.getItem('access_token');
-  if (!token) {
+  const refreshToken = localStorage.getItem('refresh_token');
+  
+  // Если нет ни access, ни refresh токена - редирект на логин
+  if (!token && !refreshToken) {
     return <Navigate to="/login" replace />;
   }
+  
   return children;
 };
 
@@ -29,6 +34,16 @@ function App() {
               <RequireAuth>
                 <AppLayout>
                   <Dashboard />
+                </AppLayout>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/business/:businessId"
+            element={
+              <RequireAuth>
+                <AppLayout>
+                  <Business />
                 </AppLayout>
               </RequireAuth>
             }

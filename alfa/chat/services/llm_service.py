@@ -35,7 +35,7 @@ class LLMService:
         conversation: Conversation,
         user_message: Message,
         temperature: float = 0.7,
-        max_tokens: int = 1000
+        max_tokens: int = 4000
     ) -> Dict[str, any]:
         """
         Генерирует ответ от LLM с автоматическим fallback на другие модели

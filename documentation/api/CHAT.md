@@ -648,7 +648,6 @@ curl -X GET http://localhost/api/chat/stats/ \
 }
 ```
 
-
 ---
 
 ## Бизнес-логика

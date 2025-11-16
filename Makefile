@@ -32,8 +32,10 @@ restart:
 shell:
 	docker-compose -f docker-compose.dev.yml exec backend python manage.py shell
 
+# Войти в контейнер в bash моде
 sh:
 	docker-compose -f docker-compose.dev.yml exec backend sh
+
 # Применить миграции
 migrate:
 	docker-compose -f docker-compose.dev.yml exec backend python manage.py migrate
@@ -70,4 +72,3 @@ test:
 status:
 	@echo "Статус всех контейнеров:"
 	@docker-compose -f docker-compose.dev.yml ps
-

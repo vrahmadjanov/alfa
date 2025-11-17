@@ -73,15 +73,13 @@ Authorization: Bearer <access_token>
 ```json
 {
   "category": "marketing",
-  "business": 1,
-  "first_message": "Привет! Нужна помощь с маркетинговой стратегией для моей кофейни"
+  "business": 1
 }
 ```
 
 **Поля:**
 - `category` (опционально) - Категория диалога: `general`, `legal`, `marketing`, `finance`, `hr`, `operations`
 - `business` (опционально) - ID бизнеса, в контексте которого ведется диалог
-- `first_message` (опционально) - Первое сообщение пользователя для автоматической генерации заголовка
 
 **Response (201 Created):**
 ```json
@@ -90,15 +88,15 @@ Authorization: Bearer <access_token>
   "message": "Диалог успешно создан",
   "data": {
     "id": 1,
-    "title": "Привет! Нужна помощь с маркетинговой стратегией...",
+    "title": "",
     "category": "marketing",
     "status": "active",
     "business": {
       "id": 1,
       "name": "Кофейня Эспрессо"
     },
-    "messages_count": 1,
-    "last_message_at": "2025-11-15T10:30:00Z",
+    "messages_count": 0,
+    "last_message_at": null,
     "created_at": "2025-11-15T10:30:00Z",
     "updated_at": "2025-11-15T10:30:00Z"
   },
@@ -134,7 +132,7 @@ Authorization: Bearer <access_token>
 **Query Parameters:**
 - `status` (опционально) - Фильтр по статусу: `active`, `archived`, `completed`
 - `category` (опционально) - Фильтр по категории: `general`, `legal`, `marketing`, `finance`, `hr`, `operations`
-- `business` (опционально) - Фильтр по ID бизнеса
+- `business` (опционально) - Фильтр по ID бизнеса. Если передать пустое значение (`business=`), покажутся только диалоги без привязки к бизнесу
 
 **Examples:**
 ```
@@ -142,6 +140,7 @@ GET /api/chat/conversations/
 GET /api/chat/conversations/?status=active
 GET /api/chat/conversations/?category=marketing
 GET /api/chat/conversations/?business=1
+GET /api/chat/conversations/?business=               # Только диалоги без бизнеса
 GET /api/chat/conversations/?status=active&category=legal
 ```
 
@@ -436,14 +435,23 @@ Authorization: Bearer <access_token>
 
 **GET** `/api/chat/stats/`
 
-Возвращает общую статистику по всем диалогам пользователя.
+Возвращает статистику по диалогам пользователя. Можно получить общую статистику или статистику по конкретному бизнесу.
 
 **Headers:**
 ```
 Authorization: Bearer <access_token>
 ```
 
-**Response (200 OK):**
+**Query Parameters:**
+- `business` (опционально) - ID бизнеса для фильтрации статистики
+
+**Examples:**
+```
+GET /api/chat/stats/                    # Общая статистика по всем диалогам
+GET /api/chat/stats/?business=1         # Статистика по диалогам конкретного бизнеса
+```
+
+**Response (200 OK) - Общая статистика:**
 ```json
 {
   "success": true,
@@ -454,40 +462,79 @@ Authorization: Bearer <access_token>
     "archived_conversations": 5,
     "completed_conversations": 2,
     "total_messages": 247,
+    "user_messages": 125,
+    "assistant_messages": 122,
+    "total_tokens_used": 45230,
+    "last_activity": "2025-11-17T14:30:00Z",
     "by_category": {
       "general": {
-        "count": 5,
-        "percentage": 33.3
+        "name": "Общее",
+        "count": 5
       },
       "marketing": {
-        "count": 6,
-        "percentage": 40.0
+        "name": "Маркетинг",
+        "count": 6
       },
       "legal": {
-        "count": 2,
-        "percentage": 13.3
+        "name": "Юридическая консультация",
+        "count": 2
       },
       "finance": {
-        "count": 2,
-        "percentage": 13.3
+        "name": "Финансы",
+        "count": 2
       }
-    },
-    "by_business": [
-      {
-        "business_id": 1,
-        "business_name": "Кофейня Эспрессо",
-        "conversations_count": 8
-      },
-      {
-        "business_id": 2,
-        "business_name": "Салон Красоты",
-        "conversations_count": 3
-      }
-    ]
+    }
   },
   "errors": null
 }
 ```
+
+**Response (200 OK) - Статистика по бизнесу:**
+```json
+{
+  "success": true,
+  "message": "Статистика получена",
+  "data": {
+    "total_conversations": 8,
+    "active_conversations": 6,
+    "archived_conversations": 2,
+    "completed_conversations": 0,
+    "total_messages": 94,
+    "user_messages": 47,
+    "assistant_messages": 47,
+    "total_tokens_used": 18500,
+    "last_activity": "2025-11-17T14:30:00Z",
+    "by_category": {
+      "marketing": {
+        "name": "Маркетинг",
+        "count": 5
+      },
+      "legal": {
+        "name": "Юридическая консультация",
+        "count": 3
+      }
+    },
+    "business": {
+      "id": 1,
+      "name": "Кофейня Эспрессо"
+    }
+  },
+  "errors": null
+}
+```
+
+**Поля ответа:**
+- `total_conversations` - Общее количество диалогов
+- `active_conversations` - Количество активных диалогов
+- `archived_conversations` - Количество архивированных диалогов
+- `completed_conversations` - Количество завершенных диалогов
+- `total_messages` - Общее количество сообщений
+- `user_messages` - Количество сообщений пользователя
+- `assistant_messages` - Количество ответов AI ассистента
+- `total_tokens_used` - Общее количество использованных токенов
+- `last_activity` - Время последней активности (последнего сообщения)
+- `by_category` - Распределение диалогов по категориям
+- `business` - Информация о бизнесе (только при фильтрации по бизнесу)
 
 ---
 
@@ -516,7 +563,7 @@ Authorization: Bearer <access_token>
 
 ## Примеры использования
 
-### Создание нового диалога с первым сообщением
+### Создание нового диалога
 
 ```bash
 curl -X POST http://localhost/api/chat/conversations/ \
@@ -524,8 +571,7 @@ curl -X POST http://localhost/api/chat/conversations/ \
   -H "Content-Type: application/json" \
   -d '{
     "category": "marketing",
-    "business": 1,
-    "first_message": "Привет! Нужна помощь с SMM стратегией"
+    "business": 1
   }'
 ```
 
@@ -568,10 +614,17 @@ curl -X DELETE http://localhost/api/chat/conversations/1/ \
   -H "Authorization: Bearer <access_token>"
 ```
 
-### Получение статистики
+### Получение общей статистики
 
 ```bash
 curl -X GET http://localhost/api/chat/stats/ \
+  -H "Authorization: Bearer <access_token>"
+```
+
+### Получение статистики по конкретному бизнесу
+
+```bash
+curl -X GET "http://localhost/api/chat/stats/?business=1" \
   -H "Authorization: Bearer <access_token>"
 ```
 
@@ -655,8 +708,8 @@ curl -X GET http://localhost/api/chat/stats/ \
 ### Создание диалогов
 - Пользователь может создавать неограниченное количество диалогов
 - При указании `business` диалог получает контекст этого бизнеса для AI
-- `first_message` автоматически создает первое сообщение и генерирует заголовок
-- Если заголовок не указан, он генерируется из первых 50 символов первого сообщения
+- Заголовок диалога автоматически генерируется из первых 50 символов первого сообщения пользователя
+- Диалог создается без сообщений, сообщения добавляются отдельным запросом
 
 ### Контекст бизнеса
 - Когда диалог привязан к бизнесу, AI ассистент получает дополнительный контекст:

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchBusinesses, updateBusiness, archiveBusiness } from '../api/business';
+import { fetchChatStats } from '../api/chat';
 import Chat from '../components/Chat';
 import Modal from '../components/Modal';
 import { 
@@ -28,10 +29,23 @@ function Business() {
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     loadBusiness();
+    loadStats();
+    // Сбрасываем текущий диалог при переходе к другому бизнесу
+    setCurrentConversation(null);
   }, [businessId]);
+
+  const loadStats = async () => {
+    try {
+      const data = await fetchChatStats(businessId);
+      setStats(data);
+    } catch (err) {
+      console.error('Error loading stats:', err);
+    }
+  };
 
   const loadBusiness = async () => {
     try {
@@ -57,6 +71,8 @@ function Business() {
 
   const handleConversationCreated = (conversation) => {
     setCurrentConversation(conversation?.id || null);
+    // Обновляем статистику при создании нового диалога
+    loadStats();
   };
 
   const handleArchive = async () => {
@@ -109,6 +125,7 @@ function Business() {
             businesses={businesses}
             currentConversation={currentConversation}
             onConversationCreated={handleConversationCreated}
+            onMessageSent={loadStats}
             initialBusinessId={business.id}
           />
         </section>
@@ -234,7 +251,9 @@ function Business() {
             </div>
             <div className="business-stat-content">
               <span className="business-stat-label">Диалогов</span>
-              <span className="business-stat-value">0</span>
+              <span className="business-stat-value">
+                {stats ? stats.total_conversations : '-'}
+              </span>
             </div>
           </div>
           <div className="business-stat-card">
@@ -243,7 +262,9 @@ function Business() {
             </div>
             <div className="business-stat-content">
               <span className="business-stat-label">Сообщений</span>
-              <span className="business-stat-value">0</span>
+              <span className="business-stat-value">
+                {stats ? stats.total_messages : '-'}
+              </span>
             </div>
           </div>
           <div className="business-stat-card">
@@ -252,7 +273,9 @@ function Business() {
             </div>
             <div className="business-stat-content">
               <span className="business-stat-label">Токенов использовано</span>
-              <span className="business-stat-value">0</span>
+              <span className="business-stat-value">
+                {stats ? stats.total_tokens_used.toLocaleString() : '-'}
+              </span>
             </div>
           </div>
           <div className="business-stat-card">
@@ -261,7 +284,17 @@ function Business() {
             </div>
             <div className="business-stat-content">
               <span className="business-stat-label">Последняя активность</span>
-              <span className="business-stat-value business-stat-value--small">Нет данных</span>
+              <span className="business-stat-value business-stat-value--small">
+                {stats && stats.last_activity
+                  ? new Date(stats.last_activity).toLocaleDateString('ru-RU', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  : 'Нет данных'
+                }
+              </span>
             </div>
           </div>
         </div>

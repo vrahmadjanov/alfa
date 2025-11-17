@@ -169,6 +169,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-bottom: 12px;
   animation: messageSlideIn 0.3s ease-out;
 }
 
@@ -568,3 +569,81 @@
   }
 }
 
+/* AI Typing Indicator */
+.chat-typing {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.chat-typing span {
+  width: 8px;
+  height: 8px;
+  background: var(--color-primary);
+  border-radius: 50%;
+  animation: typing 1.4s infinite;
+}
+
+.chat-typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+.chat-typing-text {
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Suggestions для ошибок */
+.chat-message-suggestions {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid rgba(255, 193, 7, 0.6);
+  border-radius: 4px;
+}
+
+.chat-suggestion-item {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 4px 0;
+}
+
+/* Метаданные сообщений */
+.chat-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.chat-message-meta span {
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+/* Сообщения с ошибками */
+.chat-message--error .chat-message-content {
+  background: rgba(244, 67, 54, 0.05);
+  border: 1px solid rgba(244, 67, 54, 0.2);
+}

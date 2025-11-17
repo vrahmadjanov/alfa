@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { sendMessage, createConversation, fetchConversation, fetchConversations } from '../api/chat';
+import { sendMessage, createConversation, fetchConversation, fetchConversations, checkMessageStatus } from '../api/chat';
 import './Chat.css';
 
-function Chat({ businesses, currentConversation, onConversationCreated, initialBusinessId }) {
+function Chat({ businesses, currentConversation, onConversationCreated, onMessageSent, initialBusinessId }) {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -12,8 +12,11 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
   const [selectedModel, setSelectedModel] = useState('');
   const [conversations, setConversations] = useState([]);
   const [errors, setErrors] = useState({});
+  const [isAiTyping, setIsAiTyping] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const isFirstRender = useRef(true);
 
   // Обновляем выбранный бизнес если изменился initialBusinessId
   useEffect(() => {
@@ -72,14 +75,33 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
     }
   }, [currentConversation]);
 
+  // Загружаем диалоги при первом рендере и при смене бизнеса
   useEffect(() => {
-    // Загружаем список диалогов
     loadConversations();
-  }, []);
+    
+    // Сбрасываем выбранный диалог при смене бизнеса (но не при первом рендере)
+    if (!isFirstRender.current) {
+      setSelectedConversation('');
+      setMessages([]);
+    } else {
+      isFirstRender.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBusiness]); // selectedBusiness есть в зависимостях, поэтому загрузка произойдет и при первом рендере
 
   const loadConversations = async () => {
     try {
-      const data = await fetchConversations({ status: 'active' });
+      // Используем selectedBusiness или initialBusinessId для фильтрации
+      const businessIdToUse = selectedBusiness || (initialBusinessId ? String(initialBusinessId) : '');
+      
+      const params = { 
+        status: 'active',
+        // Всегда передаем параметр business для фильтрации
+        // Если бизнес не выбран (пустая строка), покажутся только диалоги без бизнеса
+        business: businessIdToUse
+      };
+      
+      const data = await fetchConversations(params);
       setConversations(data || []);
     } catch (error) {
       console.error('Error loading conversations:', error);
@@ -110,6 +132,94 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
     }
   };
 
+  const pollMessageStatus = async (conversationId, messageId) => {
+    const maxAttempts = 120; // 120 попыток = 10 минут (каждые 5 секунд)
+    let attempts = 0;
+    
+    // Показываем индикатор "AI печатает"
+    setIsAiTyping(true);
+    setProcessingMessage(messageId);
+
+    const checkStatus = async () => {
+      try {
+        attempts++;
+        const statusData = await checkMessageStatus(conversationId, messageId);
+
+        if (statusData.processing_status === 'completed' && statusData.assistant_message) {
+          // Ответ готов - добавляем сообщение ассистента
+          setMessages((prev) => [...prev, statusData.assistant_message]);
+          setIsAiTyping(false);
+          setProcessingMessage(null);
+          setIsLoading(false);
+          
+          // Обновляем список диалогов (с новым названием)
+          await loadConversations();
+          
+          // Перезагружаем текущий диалог чтобы обновить его название
+          if (conversationId) {
+            await loadConversation(conversationId);
+          }
+          
+          if (onMessageSent) {
+            onMessageSent();
+          }
+        } else if (statusData.processing_status === 'failed') {
+          // Ошибка при обработке
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `error-${Date.now()}`,
+              role: 'assistant',
+              content: 'Извините, произошла ошибка при генерации ответа.',
+              error: true,
+              created_at: new Date().toISOString(),
+              suggestions: [
+                'Переформулировать вопрос',
+                'Задать более конкретный вопрос',
+                'Попробовать через минуту'
+              ]
+            }
+          ]);
+          setErrors({ general: 'Не удалось получить ответ от AI. Попробуйте еще раз.' });
+          setIsAiTyping(false);
+          setProcessingMessage(null);
+          setIsLoading(false);
+        } else if (attempts < maxAttempts) {
+          // Продолжаем проверять статус
+          setTimeout(checkStatus, 5000); // Проверка каждые 5 секунд
+        } else {
+          // Превышено максимальное время ожидания
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `timeout-${Date.now()}`,
+              role: 'assistant',
+              content: 'Генерация ответа заняла слишком много времени. Это может быть из-за высокой нагрузки на AI модель. Попробуйте повторить запрос через несколько минут.',
+              error: true,
+              created_at: new Date().toISOString()
+            }
+          ]);
+          setErrors({ general: 'Превышено время ожидания ответа от AI.' });
+          setIsAiTyping(false);
+          setProcessingMessage(null);
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('Error checking message status:', error);
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 5000);
+        } else {
+          setIsAiTyping(false);
+          setProcessingMessage(null);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    // Начинаем проверку статуса
+    setTimeout(checkStatus, 2000); // Первая проверка через 2 секунды
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
@@ -130,12 +240,14 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
       // Если нет активного диалога, создаем новый
       if (!conversationId) {
         const payload = {
-          first_message: userMessage,
           category: 'general'
         };
         
-        if (selectedBusiness) {
-          payload.business = parseInt(selectedBusiness, 10);
+        // Используем selectedBusiness или initialBusinessId
+        const businessIdToUse = selectedBusiness || (initialBusinessId ? String(initialBusinessId) : null);
+        
+        if (businessIdToUse) {
+          payload.business = parseInt(businessIdToUse, 10);
         }
 
         if (selectedModel) {
@@ -146,51 +258,23 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
         conversationId = newConversation.id;
         setSelectedConversation(String(conversationId));
         
+        // Обновляем список диалогов сразу после создания
+        await loadConversations();
+        
         if (onConversationCreated) {
           onConversationCreated({ id: conversationId });
         }
-
-        // Загружаем сообщения нового диалога
-        await loadConversation(conversationId);
-        // Обновляем список диалогов
-        await loadConversations();
-      } else {
-        // Добавляем сообщение пользователя в UI
-        const tempUserMessage = {
-          id: Date.now(),
-          role: 'user',
-          content: userMessage,
-          created_at: new Date().toISOString()
-        };
-        setMessages((prev) => [...prev, tempUserMessage]);
-
-        // Отправляем сообщение (передаем модель, если выбрана)
-        const response = await sendMessage(conversationId, userMessage, selectedModel || null);
-        
-        // Проверяем, что ответ ассистента не пустой
-        const assistantContent = response.assistant_message?.content || '';
-        
-        if (!assistantContent.trim()) {
-          // Если контент пустой, показываем ошибку
-          setMessages((prev) => [
-            ...prev.filter(m => m.id !== tempUserMessage.id),
-            response.user_message,
-            {
-              ...response.assistant_message,
-              content: 'Извините, произошла ошибка при генерации ответа. Попробуйте переформулировать вопрос или задать другой.',
-              error: true
-            }
-          ]);
-          setErrors({ general: 'Не удалось получить ответ от AI. Попробуйте еще раз.' });
-        } else {
-          // Обновляем сообщения с ответом от сервера
-          setMessages((prev) => [
-            ...prev.filter(m => m.id !== tempUserMessage.id),
-            response.user_message,
-            response.assistant_message
-          ]);
-        }
       }
+
+      // Отправляем сообщение (теперь это асинхронно)
+      const response = await sendMessage(conversationId, userMessage, selectedModel || null);
+      
+      // Добавляем сообщение пользователя
+      setMessages((prev) => [...prev, response.user_message]);
+      
+      // Запускаем polling для проверки статуса
+      const userMessageId = response.user_message.id;
+      pollMessageStatus(conversationId, userMessageId);
     } catch (apiErrors) {
       setErrors(apiErrors);
     } finally {
@@ -226,8 +310,21 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
                 ) : (
                   message.content || '(Пустой ответ)'
                 )}
+                
+                {/* Показываем suggestions для ошибок */}
+                {message.error && message.suggestions && (
+                  <div className="chat-message-suggestions">
+                    {message.suggestions.map((suggestion, idx) => (
+                      <div key={idx} className="chat-suggestion-item">
+                        • {suggestion}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {message.role === 'assistant' && (
+              
+              {/* Метаданные только для сообщений ассистента */}
+              {message.role === 'assistant' && !message.error && (
                 <div className="chat-message-meta">
                   {message.model && (
                     <span className="chat-message-model">{message.model}</span>
@@ -247,7 +344,7 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
             </div>
           ))
         )}
-        {isLoading && (
+        {isAiTyping && (
           <div className="chat-message chat-message--assistant">
             <div className="chat-message-content">
               <div className="chat-typing">
@@ -255,6 +352,7 @@ function Chat({ businesses, currentConversation, onConversationCreated, initialB
                 <span></span>
                 <span></span>
               </div>
+              <div className="chat-typing-text">AI генерирует ответ...</div>
             </div>
           </div>
         )}

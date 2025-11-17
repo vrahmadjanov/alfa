@@ -40,8 +40,7 @@ class ConversationCreateAPITest(APITestCase):
         
         payload = {
             'category': 'marketing',
-            'business': self.business.id,
-            'first_message': 'Привет, нужна помощь с маркетингом'
+            'business': self.business.id
         }
         
         response = self.client.post(self.create_url, data=payload, format='json')
@@ -54,10 +53,9 @@ class ConversationCreateAPITest(APITestCase):
         # Проверяем, что диалог создан в БД
         self.assertTrue(Conversation.objects.filter(user=self.user).exists())
         
-        # Проверяем, что первое сообщение создано
+        # Проверяем, что диалог создан без сообщений
         conversation = Conversation.objects.get(user=self.user)
-        self.assertEqual(conversation.messages.count(), 1)
-        self.assertEqual(conversation.messages.first().content, payload['first_message'])
+        self.assertEqual(conversation.messages.count(), 0)
     
     def test_create_conversation_without_business(self):
         """Тест создания диалога без привязки к бизнесу"""
@@ -195,6 +193,21 @@ class ConversationListAPITest(APITestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['data']), 1)
+        self.assertEqual(response.data['data'][0]['business'], self.business1.id)
+    
+    def test_list_conversations_filter_by_no_business(self):
+        """Тест фильтрации диалогов без привязки к бизнесу"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access_token}')
+        
+        # Передаем пустой параметр business для получения только диалогов без бизнеса
+        response = self.client.get(f'{self.list_url}?business=')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['data']), 2)  # conv2 и conv3 без бизнеса
+        
+        # Проверяем, что все диалоги без бизнеса
+        for conversation in response.data['data']:
+            self.assertIsNone(conversation['business'])
 
 
 class ConversationDetailAPITest(APITestCase):
@@ -421,15 +434,24 @@ class ConversationStatsAPITest(APITestCase):
             password='TestPassword123!'
         )
         
-        # Создаем диалоги разных категорий
+        # Создаем бизнес
+        self.business = Business.objects.create(
+            owner=self.user,
+            name='Тестовый бизнес',
+            business_type='cafe'
+        )
+        
+        # Создаем диалоги разных категорий (2 с бизнесом, 2 без)
         Conversation.objects.create(
             user=self.user,
+            business=self.business,
             title='Маркетинг 1',
             category='marketing',
             status='active'
         )
         Conversation.objects.create(
             user=self.user,
+            business=self.business,
             title='Маркетинг 2',
             category='marketing',
             status='active'
@@ -460,7 +482,7 @@ class ConversationStatsAPITest(APITestCase):
         self.stats_url = reverse('chat:stats')
     
     def test_get_stats_success(self):
-        """Тест получения статистики"""
+        """Тест получения общей статистики"""
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access_token}')
         
         response = self.client.get(self.stats_url)
@@ -474,5 +496,24 @@ class ConversationStatsAPITest(APITestCase):
         self.assertEqual(stats['archived_conversations'], 1)
         self.assertEqual(stats['total_messages'], 1)
         self.assertIn('by_category', stats)
+        self.assertIn('total_tokens_used', stats)
+        self.assertIn('user_messages', stats)
+        self.assertIn('assistant_messages', stats)
+    
+    def test_get_stats_by_business(self):
+        """Тест получения статистики по конкретному бизнесу"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.access_token}')
+        
+        response = self.client.get(f'{self.stats_url}?business={self.business.id}')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        
+        stats = response.data['data']
+        # Только 2 диалога связаны с бизнесом
+        self.assertEqual(stats['total_conversations'], 2)
+        self.assertIn('business', stats)
+        self.assertEqual(stats['business']['id'], self.business.id)
+        self.assertEqual(stats['business']['name'], self.business.name)
         self.assertEqual(stats['by_category']['marketing']['count'], 2)
 

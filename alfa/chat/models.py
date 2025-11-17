@@ -116,6 +116,12 @@ class Message(models.Model):
         ASSISTANT = 'assistant', _('Ассистент')
         SYSTEM = 'system', _('Система')
     
+    class ProcessingStatus(models.TextChoices):
+        PENDING = 'pending', _('Ожидает обработки')
+        PROCESSING = 'processing', _('Обрабатывается')
+        COMPLETED = 'completed', _('Завершено')
+        FAILED = 'failed', _('Ошибка')
+    
     # Связь с диалогом
     conversation = models.ForeignKey(
         Conversation,
@@ -133,6 +139,15 @@ class Message(models.Model):
     
     # Содержимое сообщения
     content = models.TextField(_('Содержимое'))
+    
+    # Статус обработки (для async генерации ответа AI)
+    processing_status = models.CharField(
+        _('Статус обработки'),
+        max_length=20,
+        choices=ProcessingStatus.choices,
+        default=ProcessingStatus.COMPLETED,
+        help_text='Статус обработки сообщения AI (для асинхронных запросов)'
+    )
     
     # Информация о модели LLM (для ответов ассистента)
     model = models.CharField(

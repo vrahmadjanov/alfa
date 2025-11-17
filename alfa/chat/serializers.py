@@ -11,14 +11,19 @@ class MessageSerializer(serializers.ModelSerializer):
     Serializer для сообщения
     """
     role_display = serializers.CharField(source='get_role_display', read_only=True)
+    processing_status_display = serializers.CharField(source='get_processing_status_display', read_only=True)
     
     class Meta:
         model = Message
         fields = [
             'id', 'role', 'role_display', 'content', 
-            'model', 'tokens_used', 'response_time', 'created_at'
+            'model', 'tokens_used', 'response_time', 'created_at',
+            'processing_status', 'processing_status_display'
         ]
-        read_only_fields = ['id', 'role_display', 'model', 'tokens_used', 'response_time', 'created_at']
+        read_only_fields = [
+            'id', 'role_display', 'model', 'tokens_used', 
+            'response_time', 'created_at', 'processing_status', 'processing_status_display'
+        ]
 
 
 class MessageCreateSerializer(serializers.ModelSerializer):
@@ -81,15 +86,10 @@ class ConversationCreateSerializer(serializers.ModelSerializer):
     """
     Serializer для создания нового диалога
     """
-    first_message = serializers.CharField(
-        write_only=True,
-        required=False,
-        help_text='Первое сообщение в диалоге'
-    )
     
     class Meta:
         model = Conversation
-        fields = ['category', 'business', 'first_message']
+        fields = ['category', 'business']
         extra_kwargs = {
             'category': {'required': False},
             'business': {'required': False},
@@ -106,8 +106,7 @@ class ConversationCreateSerializer(serializers.ModelSerializer):
         return value
     
     def create(self, validated_data):
-        """Создание диалога с первым сообщением"""
-        first_message_content = validated_data.pop('first_message', None)
+        """Создание диалога"""
         user = self.context['request'].user
         
         # Создаем диалог
@@ -115,14 +114,6 @@ class ConversationCreateSerializer(serializers.ModelSerializer):
             user=user,
             **validated_data
         )
-        
-        # Если передано первое сообщение, создаем его
-        if first_message_content:
-            Message.objects.create(
-                conversation=conversation,
-                role=Message.Role.USER,
-                content=first_message_content
-            )
         
         return conversation
 

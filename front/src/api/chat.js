@@ -129,3 +129,41 @@ export async function archiveConversation(conversationId) {
   }
 }
 
+// Получить статистику по диалогам
+export async function fetchChatStats(businessId = null) {
+  try {
+    const params = {};
+    if (businessId) {
+      params.business = businessId;
+    }
+    
+    const response = await apiClient.get('/chat/stats/', { params });
+    const { success, data, errors } = response.data;
+
+    if (!success) {
+      throw new ApiError(errors || { general: response.data.message });
+    }
+
+    return data;
+  } catch (error) {
+    throw extractErrors(error);
+  }
+}
+
+// Проверить статус обработки сообщения
+export async function checkMessageStatus(conversationId, messageId) {
+  try {
+    const response = await apiClient.get(
+      `/chat/conversations/${conversationId}/messages/${messageId}/status/`
+    );
+    const { success, data, errors } = response.data;
+
+    if (!success) {
+      throw new ApiError(errors || { general: response.data.message });
+    }
+
+    return data;
+  } catch (error) {
+    throw extractErrors(error);
+  }
+}

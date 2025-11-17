@@ -7,6 +7,7 @@ from chat.views import (
     ConversationListCreateView,
     ConversationDetailView,
     MessageCreateView,
+    MessageStatusView,
     ConversationStatsView
 )
 
@@ -19,6 +20,7 @@ urlpatterns = [
     
     # Сообщения (GET - список, POST - отправить)
     path('conversations/<int:conversation_id>/messages/', MessageCreateView.as_view(), name='messages'),
+    path('conversations/<int:conversation_id>/messages/<int:message_id>/status/', MessageStatusView.as_view(), name='message_status'),
     
     # Статистика
     path('stats/', ConversationStatsView.as_view(), name='stats'),

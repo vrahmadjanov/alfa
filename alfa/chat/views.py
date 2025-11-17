@@ -4,6 +4,7 @@ Views для Chat API
 from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
+from django.db import models
 
 from chat.models import Conversation, Message
 from chat.serializers import (
@@ -54,9 +55,13 @@ class ConversationListCreateView(generics.ListCreateAPIView):
             queryset = queryset.filter(category=category_filter)
         
         # Фильтрация по бизнесу
-        business_id = request.query_params.get('business')
-        if business_id:
-            queryset = queryset.filter(business_id=business_id)
+        if 'business' in request.query_params:
+            business_id = request.query_params.get('business')
+            if business_id:
+                queryset = queryset.filter(business_id=business_id)
+            else:
+                # Если передан параметр business, но он пустой, показываем только диалоги без бизнеса
+                queryset = queryset.filter(business__isnull=True)
         
         serializer = self.get_serializer(queryset, many=True)
         
@@ -181,7 +186,7 @@ class MessageCreateView(APIView):
         )
     
     def post(self, request, conversation_id):
-        """POST - отправить сообщение и получить ответ от AI"""
+        """POST - отправить сообщение и запустить асинхронную генерацию ответа от AI"""
         # Проверяем, что диалог принадлежит пользователю
         conversation = get_object_or_404(
             Conversation,
@@ -197,33 +202,68 @@ class MessageCreateView(APIView):
                 message="Ошибка валидации сообщения"
             )
         
-        # Создаем сообщение пользователя
+        # Создаем сообщение пользователя с статусом "ожидает обработки"
         user_message = Message.objects.create(
             conversation=conversation,
             role=Message.Role.USER,
-            content=serializer.validated_data['content']
+            content=serializer.validated_data['content'],
+            processing_status=Message.ProcessingStatus.PENDING
         )
         
-        # Генерируем ответ от LLM
-        llm_service = LLMService()
-        response_data = llm_service.generate_response(
-            conversation=conversation,
-            user_message=user_message
-        )
+        # Запускаем асинхронную задачу для генерации ответа
+        from chat.tasks import generate_ai_response
+        task = generate_ai_response.delay(user_message.id)
         
-        # Создаем сообщение ассистента
-        assistant_message = LLMService.create_assistant_message(
-            conversation=conversation,
-            response_data=response_data
-        )
-        
-        # Возвращаем оба сообщения
+        # Возвращаем сообщение пользователя и ID задачи
         return APIResponse.success(
             data={
                 'user_message': MessageSerializer(user_message).data,
-                'assistant_message': MessageSerializer(assistant_message).data
+                'task_id': task.id
             },
-            message="Сообщение отправлено"
+            message="Сообщение отправлено, генерация ответа начата"
+        )
+
+
+class MessageStatusView(APIView):
+    """
+    API endpoint для проверки статуса обработки сообщения
+    
+    GET /api/chat/conversations/{conversation_id}/messages/{message_id}/status/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, conversation_id, message_id):
+        """Получение статуса обработки сообщения"""
+        # Проверяем, что сообщение существует и принадлежит пользователю
+        message = get_object_or_404(
+            Message,
+            id=message_id,
+            conversation_id=conversation_id,
+            conversation__user=request.user
+        )
+        
+        # Если сообщение обработано, получаем ответ ассистента
+        assistant_message = None
+        if message.processing_status == Message.ProcessingStatus.COMPLETED:
+            # Ищем следующее сообщение ассистента
+            assistant_message = Message.objects.filter(
+                conversation_id=conversation_id,
+                role=Message.Role.ASSISTANT,
+                created_at__gt=message.created_at
+            ).order_by('created_at').first()
+        
+        data = {
+            'message_id': message.id,
+            'processing_status': message.processing_status,
+            'processing_status_display': message.get_processing_status_display(),
+        }
+        
+        if assistant_message:
+            data['assistant_message'] = MessageSerializer(assistant_message).data
+        
+        return APIResponse.success(
+            data=data,
+            message="Статус получен"
         )
 
 
@@ -231,21 +271,40 @@ class ConversationStatsView(APIView):
     """
     API endpoint для получения статистики по диалогам пользователя
     
-    GET /api/chat/stats/
+    GET /api/chat/stats/ - общая статистика
+    GET /api/chat/stats/?business=<id> - статистика по конкретному бизнесу
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
         """Получение статистики по диалогам"""
         user = request.user
+        business_id = request.query_params.get('business')
         
+        # Базовый queryset
         conversations = Conversation.objects.filter(user=user)
+        messages_query = Message.objects.filter(conversation__user=user)
+        
+        # Фильтрация по бизнесу, если указан
+        if business_id:
+            conversations = conversations.filter(business_id=business_id)
+            messages_query = messages_query.filter(conversation__business_id=business_id)
+        
+        # Последний диалог для определения последней активности
+        last_conversation = conversations.order_by('-last_message_at').first()
         
         stats = {
             'total_conversations': conversations.count(),
             'active_conversations': conversations.filter(status=Conversation.Status.ACTIVE).count(),
             'archived_conversations': conversations.filter(status=Conversation.Status.ARCHIVED).count(),
-            'total_messages': Message.objects.filter(conversation__user=user).count(),
+            'completed_conversations': conversations.filter(status=Conversation.Status.COMPLETED).count(),
+            'total_messages': messages_query.count(),
+            'user_messages': messages_query.filter(role=Message.Role.USER).count(),
+            'assistant_messages': messages_query.filter(role=Message.Role.ASSISTANT).count(),
+            'total_tokens_used': messages_query.aggregate(
+                total=models.Sum('tokens_used')
+            )['total'] or 0,
+            'last_activity': last_conversation.last_message_at if last_conversation else None,
             'by_category': {}
         }
         
@@ -256,6 +315,16 @@ class ConversationStatsView(APIView):
                 stats['by_category'][category.value] = {
                     'name': category.label,
                     'count': count
+                }
+        
+        # Если запрашивается статистика по бизнесу, добавляем информацию о бизнесе
+        if business_id:
+            from users.models import Business
+            business = Business.objects.filter(id=business_id, owner=user).first()
+            if business:
+                stats['business'] = {
+                    'id': business.id,
+                    'name': business.name
                 }
         
         return APIResponse.success(

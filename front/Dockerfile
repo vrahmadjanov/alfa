@@ -2,10 +2,13 @@ FROM node:22-slim
 
 WORKDIR /app
 
-COPY package.json .
-
+COPY package*.json ./
 RUN npm install
 
 COPY . .
 
-CMD ["npm", "start"]
+RUN npm run build && npm install -g serve
+
+EXPOSE 3000
+
+CMD ["serve", "-s", "build", "-l", "3000"]

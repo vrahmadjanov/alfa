@@ -2,7 +2,7 @@ services:
   backend:
     build:
       context: ./alfa
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
       - "8000:8000"
     volumes:
@@ -44,10 +44,25 @@ services:
       timeout: 3s
       retries: 5
 
+  celery_worker:
+    build:
+      context: ./alfa
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./alfa:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A alfa worker --loglevel=info
+
   frontend:
     build:
       context: ./front
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
       - "3000:3000"
     volumes:
@@ -60,9 +75,9 @@ services:
   nginx:
     build:
       context: ./nginx
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
-      - "80:80"
+      - "8080:8080"
     volumes:
       - static_volume:/var/www/static:ro
       - media_volume:/var/www/media:ro
